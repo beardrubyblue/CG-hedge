@@ -1,0 +1,31 @@
+{
+    "global": {
+        "wallets": {
+            "test": {
+                "address": "0x7789e2e2f74059ae58a9f8e38d9410f770559c4e",
+                "private_key": "",
+                "api_secret": "0x1e9cc13606320a67e2c93bfeb638a6adc229cf8d9163abe6b0ad71d03dd91ba0",
+                "trigger_price": 62000,
+                "amount": 15.0,
+                "sl_offset": 1000,
+                "is_running": false
+            },
+            "test2": {
+                "address": "0x7789e2e2f74059ae58a9f8e38d9410f770559c4e",
+                "private_key": "",
+                "api_secret": "0x1e9cc13606320a67e2c93bfeb638a6adc229cf8d9163abe6b0ad71d03dd91ba0",
+                "trigger_price": 62000,
+                "amount": 15,
+                "sl_offset": 1000,
+                "is_running": false
+            }
+        }
+    },
+    "users": {
+        "1359115013": "approved",
+        "729600548": "rejected"
+    },
+    "1359115013": {
+        "wallets": {}
+    }
+}

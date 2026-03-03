@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bot:
+    build: .
+    container_name: cg_hedge_bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      # ВАЖНО: 
+      # Если вы переносите бота на чистый сервер, обязательно создайте пусть даже пустой файл базы данных ВРУЧНУЮ перед первым запуском (например командой: touch users_db.json). 
+      # Если его не будет, Docker создаст директорию с таким именем, и бот упадет с ошибкой доступа!
+      - ./users_db.json:/app/users_db.json
