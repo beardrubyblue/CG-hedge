@@ -76,8 +76,12 @@ class PriceMonitor:
                                        f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
                                        f"📉 BTC Цена: {current_price} USD\n"
                                        f"💰 Объем: {result['size']} BTC (~{amount_usdc} USDC)\n"
-                                       f"🛡 Stop-Loss установлен на: {result['sl_price']} USD")
+                                       f"🛡 Stop-Loss установлен на: {result.get('sl_price', 'N/A')} USD")
                             await self.notify(message)
+                            
+                            # Даем бирже время обновить стейт (иначе PnL вернет None и бот решит что нас выбило по стопу)
+                            await asyncio.sleep(3)
+                            continue
                         else:
                             await self.notify(f"❌ Ошибка выставления ордера ({self.hl.address[:6]}): {result['error']}")
                             self.is_running = False
@@ -108,13 +112,22 @@ class PriceMonitor:
                     reason = None
                     
                     if pnl is None:
-                        # Позиции нет, значит закрылась по защитному SL!
-                        logger.info("Position absent! Probably closed by exchange StopLoss.")
-                        self.hedge_active = False
-                        self.attempts += 1
-                        reason = "сработал защитный SL (цена)"
+                        self.none_pnl_count = getattr(self, "none_pnl_count", 0) + 1
+                        
+                        if self.none_pnl_count >= 3:
+                            # Позиции стабильно нет 3 тика подряд! Значит закрылась по защитному SL!
+                            logger.info("Position absent for 3 ticks! Probably closed by exchange StopLoss.")
+                            self.hedge_active = False
+                            self.attempts += 1
+                            reason = "сработал защитный SL (цена)"
+                            self.none_pnl_count = 0
+                        else:
+                            logger.info(f"Position absent, waiting to confirm API lag ({self.none_pnl_count}/3)...")
+                            await asyncio.sleep(2)
+                            continue
                         
                     else:
+                        self.none_pnl_count = 0  # Сбрасываем счетчик, если позиция найдена
                         logger.info(f"Monitoring PnL: {pnl} USDC | Limit constraint: <= -{loss_limit} USDC (Attempt: {self.attempts+1}/6)")
                         
                         if self.attempts < 5 and pnl <= -loss_limit:
