@@ -37,7 +37,7 @@ class PriceMonitor:
                 # Логика срабатывания (одиночный проход при первом запуске или постоянный мониторинг, если SL)
                 trigger_price = self.config["trigger_price"]
                 sl_offset = self.config["sl_offset"]
-                amount_usdc = self.config.get("option_deposit", 47250.0)
+                amount_usdc = self.config.get("option_deposit", self.config.get("amount", 47250.0))
                 
                 if not self.hedge_active and getattr(self, "waiting_for_entry", False):
                     # Мы выставили Stop-Market ордер, но цена еще не дошла. Ждем!

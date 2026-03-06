@@ -192,11 +192,12 @@ async def general_status_cb(callback: CallbackQuery):
         hedge_status = "📉 ХЕДЖ ОТКРЫТ" if monitor.hedge_active else "⏳ Ожидает триггер"
         cfg = monitor.config
         
+        deposit = cfg.get('option_deposit', cfg.get('amount', 47250))
         text += (
             f"**{w_name}** | {is_running}\n"
             f"└ Статус позиции: `{hedge_status}`\n"
             f"└ Настроен на: `{cfg['trigger_price']} USD`\n"
-            f"└ Объем (из депозита): `{cfg.get('option_deposit', 47250)} USDC`\n"
+            f"└ Объем (из депозита): `{deposit} USDC`\n"
             f"└ Попытки (PnL): `{getattr(monitor, 'attempts', 0)}/{getattr(monitor, 'max_attempts', 6)}`\n\n"
         )
         
@@ -269,6 +270,7 @@ async def manage_wallet(callback: CallbackQuery):
     is_running = w_name in active_monitors
     
     config = get_user_config(callback.from_user.id)["wallets"][w_name]
+    deposit = config.get('option_deposit', config.get('amount', 47250))
     text = (
         f"⚙️ **Управление: {w_name}**\n"
         f"Адрес: `{config['address'][:10]}...` \n"
@@ -276,7 +278,7 @@ async def manage_wallet(callback: CallbackQuery):
         f"🎯 Триггер: {config['trigger_price']} USD\n"
         f"🛡 SL Offset: {config['sl_offset']}\n"
         f"💵 Опц.Прибыль (P): {config.get('option_profit', 1000)} USDC\n"
-        f"🏦 Опц.Депозит: {config.get('option_deposit', 47250)} USDC"
+        f"🏦 Опц.Депозит: {deposit} USDC"
     )
     await callback.message.edit_text(text, reply_markup=get_wallet_manage_keyboard(w_name, is_running, callback.from_user.id), parse_mode="Markdown")
     await callback.answer()
@@ -441,7 +443,7 @@ async def test_order_cb(callback: CallbackQuery):
     
     try:
         # Проверяем, хватит ли объема на минимально (мин обьем обычно зависит от монеты, для BTC это ~$10)
-        deposit_val = config.get("option_deposit", 47250.0)
+        deposit_val = config.get("option_deposit", config.get("amount", 47250.0))
         test_amount = 15.0 if deposit_val < 15.0 else deposit_val
         
         handler = HyperliquidHandler(config["address"], config["private_key"], config["api_secret"])
