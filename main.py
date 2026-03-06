@@ -22,7 +22,6 @@ class BotState(StatesGroup):
     waiting_for_api_secret = State()
     # Settings
     waiting_for_price = State()
-    waiting_for_amount = State()
     waiting_for_sl = State()
     waiting_for_profit = State()
     waiting_for_deposit = State()
@@ -81,7 +80,6 @@ def get_wallet_manage_keyboard(wallet_name, is_running, user_id):
 def get_params_keyboard(wallet_name):
     buttons = [
         [InlineKeyboardButton(text="🎯 Цена триггера", callback_data=f"edit_price_{wallet_name}")],
-        [InlineKeyboardButton(text="💰 Объем (USDC)", callback_data=f"edit_amount_{wallet_name}")],
         [InlineKeyboardButton(text="🛡 SL Offset", callback_data=f"edit_sl_{wallet_name}")],
         [InlineKeyboardButton(text="💵 Опц.Прибыль (P)", callback_data=f"edit_profit_{wallet_name}")],
         [InlineKeyboardButton(text="🏦 Опц.Депозит", callback_data=f"edit_deposit_{wallet_name}")],
@@ -198,7 +196,7 @@ async def general_status_cb(callback: CallbackQuery):
             f"**{w_name}** | {is_running}\n"
             f"└ Статус позиции: `{hedge_status}`\n"
             f"└ Настроен на: `{cfg['trigger_price']} USD`\n"
-            f"└ Объем: `{cfg['amount']} USDC`\n"
+            f"└ Объем (из депозита): `{cfg.get('option_deposit', 47250)} USDC`\n"
             f"└ Попытки (PnL): `{getattr(monitor, 'attempts', 0)}/{getattr(monitor, 'max_attempts', 6)}`\n\n"
         )
         
@@ -276,7 +274,6 @@ async def manage_wallet(callback: CallbackQuery):
         f"Адрес: `{config['address'][:10]}...` \n"
         f"Статус: {'🟢 Активен' if is_running else '🔴 Остановлен'}\n\n"
         f"🎯 Триггер: {config['trigger_price']} USD\n"
-        f"💰 Объем: {config['amount']} USDC\n"
         f"🛡 SL Offset: {config['sl_offset']}\n"
         f"💵 Опц.Прибыль (P): {config.get('option_profit', 1000)} USDC\n"
         f"🏦 Опц.Депозит: {config.get('option_deposit', 47250)} USDC"
@@ -350,32 +347,6 @@ async def edit_price_finish(message: Message, state: FSMContext):
     except ValueError:
         try:
             await bot.edit_message_text(f"❌ '{message.text}' не является числом. Введите число для '{data['edit_wallet']}':", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_cancel_keyboard())
-        except: pass
-
-@dp.callback_query(F.data.startswith("edit_amount_"))
-async def edit_amount_start(callback: CallbackQuery, state: FSMContext):
-    w_name = callback.data.split("_")[-1]
-    await state.set_state(BotState.waiting_for_amount)
-    await state.update_data(edit_wallet=w_name)
-    await state.update_data(menu_msg_id=callback.message.message_id)
-    await callback.message.edit_text(f"Введите новый объем в USDC для '{w_name}' (мин 10-15$):", reply_markup=get_cancel_keyboard())
-    await callback.answer()
-
-@dp.message(BotState.waiting_for_amount)
-async def edit_amount_finish(message: Message, state: FSMContext):
-    data = await state.get_data()
-    try: await message.delete()
-    except: pass
-    try:
-        val = float(message.text)
-        update_wallet_config(message.from_user.id, data["edit_wallet"], amount=val)
-        try:
-            await bot.edit_message_text(f"✅ Объем для '{data['edit_wallet']}' обновлен: {val}\n\nВозврат в меню...", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_main_keyboard())
-        except: pass
-        await state.clear()
-    except ValueError:
-        try:
-            await bot.edit_message_text(f"❌ Ошибка. Введите число для объема (USDC):", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_cancel_keyboard())
         except: pass
 
 @dp.callback_query(F.data.startswith("edit_sl_"))
@@ -470,7 +441,8 @@ async def test_order_cb(callback: CallbackQuery):
     
     try:
         # Проверяем, хватит ли объема на минимально (мин обьем обычно зависит от монеты, для BTC это ~$10)
-        test_amount = 15.0 if config["amount"] < 15.0 else config["amount"]
+        deposit_val = config.get("option_deposit", 47250.0)
+        test_amount = 15.0 if deposit_val < 15.0 else deposit_val
         
         handler = HyperliquidHandler(config["address"], config["private_key"], config["api_secret"])
         current_price = handler.get_market_price("BTC")
