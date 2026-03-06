@@ -114,9 +114,12 @@ class PriceMonitor:
                         self.attempts += 1
                         reason = "сработал защитный SL (цена)"
                         
-                    elif self.attempts < 5 and pnl <= -loss_limit:
-                        # Программное закрытие по лимиту убытка (только для первых 5 попыток)
-                        logger.info(f"PnL {pnl} <= -{loss_limit}. Closing position.")
+                    else:
+                        logger.info(f"Monitoring PnL: {pnl} USDC | Limit constraint: <= -{loss_limit} USDC (Attempt: {self.attempts+1}/6)")
+                        
+                        if self.attempts < 5 and pnl <= -loss_limit:
+                            # Программное закрытие по лимиту убытка (только для первых 5 попыток)
+                            logger.info(f"PnL {pnl} <= -{loss_limit}. Closing position.")
                         self.hl.close_position(self.asset)
                         self.hl.cancel_all_orders(self.asset) # Убираем отложенные SL
                         self.hedge_active = False
