@@ -133,11 +133,11 @@ class PriceMonitor:
                         if self.attempts < 5 and pnl <= -loss_limit:
                             # Программное закрытие по лимиту убытка (только для первых 5 попыток)
                             logger.info(f"PnL {pnl} <= -{loss_limit}. Closing position.")
-                        self.hl.close_position(self.asset)
-                        self.hl.cancel_all_orders(self.asset) # Убираем отложенные SL
-                        self.hedge_active = False
-                        self.attempts += 1
-                        reason = f"достигнут лимит убытка {pnl} USDC"
+                            self.hl.close_position(self.asset)
+                            self.hl.cancel_all_orders(self.asset) # Убираем отложенные SL
+                            self.hedge_active = False
+                            self.attempts += 1
+                            reason = f"достигнут лимит убытка {pnl} USDC"
                     
                     if not self.hedge_active:
                         if self.attempts < 5:
