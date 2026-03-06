@@ -16,7 +16,7 @@ class PriceMonitor:
         self.asset = "BTC"
         self.active_order_ids = set()
         self.attempts = 0
-        self.max_attempts = 6
+        self.max_attempts = 5
 
     async def start(self):
         self.is_running = True
@@ -128,10 +128,10 @@ class PriceMonitor:
                         
                     else:
                         self.none_pnl_count = 0  # Сбрасываем счетчик, если позиция найдена
-                        logger.info(f"Monitoring PnL: {pnl} USDC | Limit constraint: <= -{loss_limit} USDC (Attempt: {self.attempts+1}/6)")
+                        logger.info(f"Monitoring PnL: {pnl} USDC | Limit constraint: <= -{loss_limit} USDC (Attempt: {self.attempts+1}/{self.max_attempts})")
                         
-                        if self.attempts < 5 and pnl <= -loss_limit:
-                            # Программное закрытие по лимиту убытка (только для первых 5 попыток)
+                        if pnl <= -loss_limit:
+                            # Программное закрытие по лимиту убытка
                             logger.info(f"PnL {pnl} <= -{loss_limit}. Closing position.")
                             self.hl.close_position(self.asset)
                             self.hl.cancel_all_orders(self.asset) # Убираем отложенные SL
@@ -140,20 +140,15 @@ class PriceMonitor:
                             reason = f"достигнут лимит убытка {pnl} USDC"
                     
                     if not self.hedge_active:
-                        if self.attempts < 5:
+                        if self.attempts < self.max_attempts:
                             await self.notify(f"⚠️ **Убыток зафиксирован: {reason}**\n"
                                               f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
-                                              f"🔄 Использовано попыток: {self.attempts}/5 (лимит на попытку: -{loss_limit} USDC)\n"
+                                              f"🔄 Использовано попыток: {self.attempts}/{self.max_attempts} (лимит на попытку: -{loss_limit} USDC)\n"
                                               f"⏳ Ожидание цены {trigger_price} USD для следующего хеджа...")
-                        elif self.attempts == 5:
-                            await self.notify(f"⚠️ **Прибыль от опциона исчерпана! ({reason})**\n"
-                                              f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
-                                              f"🔄 Попытка: 6 (Последний жесткий хедж)\n"
-                                              f"⏳ Бот ждет {trigger_price} USD для финального входа со строгим ценовым SL.")
                         else:
-                            await self.notify(f"🛑 **ФАТАЛЬНЫЙ УБЫТОК!**\n"
+                            await self.notify(f"🛑 **ФАТАЛЬНЫЙ УБЫТОК! Прибыль от опциона исчерпана.**\n"
                                               f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
-                                              f"❌ Зафиксирован 6-й убыток ({reason}).\n"
+                                              f"❌ Зафиксировано {self.max_attempts} максимальных убытков ({reason}).\n"
                                               f"🤖 Работа бота по данному кошельку остановлена навсегда.")
                             self.is_running = False
                             break
