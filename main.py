@@ -292,7 +292,7 @@ async def toggle_wallet(callback: CallbackQuery):
         monitor = active_monitors.pop(w_name)
         monitor.stop()
         
-        # Отменяем все ордера и закрываем позицию
+
         try:
             await callback.answer(f"🛑 Останавливаем '{w_name}' и очищаем биржу...")
             # Выполняем синхронные запросы к бирже
