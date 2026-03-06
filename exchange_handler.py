@@ -55,10 +55,19 @@ class HyperliquidHandler:
             
             # Направление SHORT = is_buy=False
             if is_market:
-                # Маркет ордер (в HL эмулируется лимиткой с запасом проскальзывания, для шорта цена ниже)
-                slippage_price = price * 0.95  # 5% проскальзывание
+                # В Hyperliquid нет чистого "Market" ордера, мы отправляем Limit ордер с параметром IOC (Immediate-or-Cancel).
+                # При продаже в шорт мы должны поставить цену, которая гарантированно НИЖЕ рынка, 
+                # чтобы она мгновенно "съела" стакан покупателей.
+                # Но если мы ставим цену СЛИШКОМ низко ("хуже" рынка более чем на 5-10%), то биржа выдает ошибку IOC.
+                m_price = self.get_market_price(asset="BTC")
+                if not m_price:
+                    m_price = price
+                
+                # Ставим цену на 3% ниже реального рынка (а не от 80000, которые вы ввели "в уме")
+                slippage_price = m_price * 0.97
                 hl_slippage_price = float(f"{float(f'{slippage_price:.5g}'):.5g}")
-                logger.info(f"Placing MARKET SHORT order for {self.address}: {size} BTC (~{hl_price})")
+                
+                logger.info(f"Placing MARKET SHORT order for {self.address}: {size} BTC (~{hl_slippage_price}) / Market Price: {m_price}")
                 order_result = self.exchange.order("BTC", False, size, hl_slippage_price, {"limit": {"tif": "Ioc"}})
             elif is_stop_market:
                 # Отложенный вход через Stop Market ("sl" означает Stop Loss триггер в API, он сработает когда цена упадет до hl_price)
