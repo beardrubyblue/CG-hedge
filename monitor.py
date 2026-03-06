@@ -15,10 +15,15 @@ class PriceMonitor:
         self.last_price = None
         self.asset = "BTC"
         self.active_order_ids = set()
+        self.attempts = 0
+        self.max_attempts = 6
 
     async def start(self):
         self.is_running = True
         logger.info("Price monitor started")
+        
+        # Принудительно устанавливаем 1x плечо при запуске
+        self.hl.set_leverage(1, self.asset)
         
         while self.is_running:
             try:
@@ -94,16 +99,51 @@ class PriceMonitor:
                             self.is_running = False
                             break
                 
-                # Проверка достижения SL (если позиция уже точно открыта, т.е. hedge_active == True)
+                # Проверка достижения SL или просадки PnL (если позиция уже открыта)
                 if self.hedge_active:
-                    # Уведомляем пользователя программно (ордер на бирже уже есть, он сам закроется)
-                    sl_price = trigger_price + sl_offset
-                    if current_price >= sl_price:
-                        logger.info(f"STOP-LOSS REACHED! Price: {current_price} >= {sl_price}")
+                    option_profit = self.config.get("option_profit", 1000.0)
+                    loss_limit = option_profit * 0.20
+                    
+                    pnl = self.hl.get_position_pnl(self.asset)
+                    reason = None
+                    
+                    if pnl is None:
+                        # Позиции нет, значит закрылась по защитному SL!
+                        logger.info("Position absent! Probably closed by exchange StopLoss.")
                         self.hedge_active = False
-                        await self.notify(f"🛑 **STOP-LOSS СРАБОТАЛ!** (Цена {current_price} >= {sl_price})\n👤 Кошелек: `{self.hl.address[:6]}...` \nХедж закрыт.")
-                        self.is_running = False # Завершаем работу монитора
-                        break
+                        self.attempts += 1
+                        reason = "сработал защитный SL (цена)"
+                        
+                    elif self.attempts < 5 and pnl <= -loss_limit:
+                        # Программное закрытие по лимиту убытка (только для первых 5 попыток)
+                        logger.info(f"PnL {pnl} <= -{loss_limit}. Closing position.")
+                        self.hl.close_position(self.asset)
+                        self.hl.cancel_all_orders(self.asset) # Убираем отложенные SL
+                        self.hedge_active = False
+                        self.attempts += 1
+                        reason = f"достигнут лимит убытка {pnl} USDC"
+                    
+                    if not self.hedge_active:
+                        if self.attempts < 5:
+                            await self.notify(f"⚠️ **Убыток зафиксирован: {reason}**\n"
+                                              f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
+                                              f"🔄 Использовано попыток: {self.attempts}/5 (лимит на попытку: -{loss_limit} USDC)\n"
+                                              f"⏳ Ожидание цены {trigger_price} USD для следующего хеджа...")
+                        elif self.attempts == 5:
+                            await self.notify(f"⚠️ **Прибыль от опциона исчерпана! ({reason})**\n"
+                                              f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
+                                              f"🔄 Попытка: 6 (Последний жесткий хедж)\n"
+                                              f"⏳ Бот ждет {trigger_price} USD для финального входа со строгим ценовым SL.")
+                        else:
+                            await self.notify(f"🛑 **ФАТАЛЬНЫЙ УБЫТОК!**\n"
+                                              f"👤 Кошелек: `{self.hl.address[:6]}...` \n"
+                                              f"❌ Зафиксирован 6-й убыток ({reason}).\n"
+                                              f"🤖 Работа бота по данному кошельку остановлена навсегда.")
+                            self.is_running = False
+                            break
+                        
+                        await asyncio.sleep(3)
+                        continue
 
                 await asyncio.sleep(3) # Проверка положения дел
                 

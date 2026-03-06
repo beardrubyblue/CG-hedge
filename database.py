@@ -66,6 +66,8 @@ def update_wallet_config(user_id, wallet_name, **kwargs):
             "trigger_price": 62000,
             "amount": 15,
             "sl_offset": 1000,
+            "option_profit": 1000,
+            "option_deposit": 47250,
             "is_running": False
         }
     

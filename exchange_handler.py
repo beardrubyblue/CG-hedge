@@ -200,3 +200,26 @@ class HyperliquidHandler:
         except Exception as e:
             logger.error(f"Error closing position: {e}")
             return {"success": False, "error": str(e)}
+
+    def set_leverage(self, leverage=1, asset="BTC"):
+        try:
+            logger.info(f"Setting leverage to {leverage}x for {asset} on {self.address}")
+            res = self.exchange.update_leverage(leverage, asset, is_cross=True)
+            return {"success": True, "result": res}
+        except Exception as e:
+            logger.error(f"Error setting leverage: {e}")
+            return {"success": False, "error": str(e)}
+
+    def get_position_pnl(self, asset="BTC"):
+        try:
+            state = self.info.user_state(self.address)
+            positions = state.get("assetPositions", [])
+            for p_data in positions:
+                pos = p_data["position"]
+                if pos["coin"] == asset:
+                    szi = float(pos["szi"])
+                    if szi != 0:
+                        return float(pos["unrealizedPnl"])
+        except Exception as e:
+            logger.error(f"Error getting PnL: {e}")
+        return None

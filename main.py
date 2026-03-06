@@ -24,6 +24,8 @@ class BotState(StatesGroup):
     waiting_for_price = State()
     waiting_for_amount = State()
     waiting_for_sl = State()
+    waiting_for_profit = State()
+    waiting_for_deposit = State()
 
 # Объекты API
 bot = Bot(token=Config.TELEGRAM_TOKEN)
@@ -81,6 +83,8 @@ def get_params_keyboard(wallet_name):
         [InlineKeyboardButton(text="🎯 Цена триггера", callback_data=f"edit_price_{wallet_name}")],
         [InlineKeyboardButton(text="💰 Объем (USDC)", callback_data=f"edit_amount_{wallet_name}")],
         [InlineKeyboardButton(text="🛡 SL Offset", callback_data=f"edit_sl_{wallet_name}")],
+        [InlineKeyboardButton(text="💵 Опц.Прибыль (P)", callback_data=f"edit_profit_{wallet_name}")],
+        [InlineKeyboardButton(text="🏦 Опц.Депозит", callback_data=f"edit_deposit_{wallet_name}")],
         [InlineKeyboardButton(text="◀️ Назад", callback_data=f"manage_{wallet_name}")]
     ]
     return InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -194,7 +198,8 @@ async def general_status_cb(callback: CallbackQuery):
             f"**{w_name}** | {is_running}\n"
             f"└ Статус позиции: `{hedge_status}`\n"
             f"└ Настроен на: `{cfg['trigger_price']} USD`\n"
-            f"└ Объем: `{cfg['amount']} USDC`\n\n"
+            f"└ Объем: `{cfg['amount']} USDC`\n"
+            f"└ Попытки (PnL): `{getattr(monitor, 'attempts', 0)}/{getattr(monitor, 'max_attempts', 6)}`\n\n"
         )
         
     await callback.message.edit_text(text, reply_markup=get_back_keyboard(), parse_mode="Markdown")
@@ -272,7 +277,9 @@ async def manage_wallet(callback: CallbackQuery):
         f"Статус: {'🟢 Активен' if is_running else '🔴 Остановлен'}\n\n"
         f"🎯 Триггер: {config['trigger_price']} USD\n"
         f"💰 Объем: {config['amount']} USDC\n"
-        f"🛡 SL Offset: {config['sl_offset']}"
+        f"🛡 SL Offset: {config['sl_offset']}\n"
+        f"💵 Опц.Прибыль (P): {config.get('option_profit', 1000)} USDC\n"
+        f"🏦 Опц.Депозит: {config.get('option_deposit', 47250)} USDC"
     )
     await callback.message.edit_text(text, reply_markup=get_wallet_manage_keyboard(w_name, is_running, callback.from_user.id), parse_mode="Markdown")
     await callback.answer()
@@ -395,6 +402,58 @@ async def edit_sl_finish(message: Message, state: FSMContext):
     except ValueError:
         try:
             await bot.edit_message_text(f"❌ Ошибка. Введите число для SL:", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_cancel_keyboard())
+        except: pass
+
+@dp.callback_query(F.data.startswith("edit_profit_"))
+async def edit_profit_start(callback: CallbackQuery, state: FSMContext):
+    w_name = callback.data.split("_")[-1]
+    await state.set_state(BotState.waiting_for_profit)
+    await state.update_data(edit_wallet=w_name)
+    await state.update_data(menu_msg_id=callback.message.message_id)
+    await callback.message.edit_text(f"Введите новую прибыль опциона (P) для '{w_name}' в USDC:\nЭто значение будет определять лимит убытка (20% от P).", reply_markup=get_cancel_keyboard())
+    await callback.answer()
+
+@dp.message(BotState.waiting_for_profit)
+async def edit_profit_finish(message: Message, state: FSMContext):
+    data = await state.get_data()
+    try: await message.delete()
+    except: pass
+    try:
+        val = float(message.text)
+        update_wallet_config(message.from_user.id, data["edit_wallet"], option_profit=val)
+        try:
+            await bot.edit_message_text(f"✅ Прибыль опциона (P) обновлена: {val} USDC\nЛимит одной просадки теперь: {val * 0.2} USDC\n\nВозврат в меню...", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_main_keyboard())
+        except: pass
+        await state.clear()
+    except ValueError:
+        try:
+            await bot.edit_message_text(f"❌ '{message.text}' не является числом. Введите число для прибыли:", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_cancel_keyboard())
+        except: pass
+
+@dp.callback_query(F.data.startswith("edit_deposit_"))
+async def edit_deposit_start(callback: CallbackQuery, state: FSMContext):
+    w_name = callback.data.split("_")[-1]
+    await state.set_state(BotState.waiting_for_deposit)
+    await state.update_data(edit_wallet=w_name)
+    await state.update_data(menu_msg_id=callback.message.message_id)
+    await callback.message.edit_text(f"Введите сумму депозита под опцион для '{w_name}' в USDC:", reply_markup=get_cancel_keyboard())
+    await callback.answer()
+
+@dp.message(BotState.waiting_for_deposit)
+async def edit_deposit_finish(message: Message, state: FSMContext):
+    data = await state.get_data()
+    try: await message.delete()
+    except: pass
+    try:
+        val = float(message.text)
+        update_wallet_config(message.from_user.id, data["edit_wallet"], option_deposit=val)
+        try:
+            await bot.edit_message_text(f"✅ Депозит опциона обновлен: {val} USDC\n\nВозврат в меню...", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_main_keyboard())
+        except: pass
+        await state.clear()
+    except ValueError:
+        try:
+            await bot.edit_message_text(f"❌ Ошибка. Введите число для депозита:", chat_id=message.chat.id, message_id=data.get("menu_msg_id"), reply_markup=get_cancel_keyboard())
         except: pass
 
 @dp.callback_query(F.data.startswith("test_"))
